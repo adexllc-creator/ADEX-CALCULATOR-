@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake Game</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #f4f4f4;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    #game-container {
+      width: 360px;
+      height: 600px;
+      background-color: #ffffff;
+      border: 3px solid #000;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Screen Management */
+    .screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #ffffff;
+      z-index: 10;
+    }
+    .hidden {
+      display: none !important;
+    }
+
+    /* Main Menu Styles */
+    #main-title {
+      color: #0066cc; /* Blue Title */
+      font-size: 48px;
+      font-weight: bold;
+      letter-spacing: 4px;
+      margin-bottom: 5px;
+    }
+    #sub-title {
+      color: #333333;
+      font-size: 16px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      margin-bottom: 45px;
+    }
+    .btn {
+      width: 200px;
+      padding: 14px 0;
+      background-color: #d32f2f; /* Red Background */
+      color: #ffffff; /* White Text */
+      font-size: 20px;
+      font-weight: bold;
+      border: 2px solid #000;
+      cursor: pointer;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    /* About Us Screen */
+    #about-screen p {
+      padding: 20px;
+      text-align: center;
+      font-size: 18px;
+      line-height: 1.5;
+    }
+
+    /* Game HUD & Canvas */
+    #hud {
+      width: 100%;
+      padding: 10px 15px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 18px;
+      font-weight: bold;
+      border-bottom: 2px solid #000;
+    }
+    #special-timer {
+      color: #d32f2f;
+    }
+    canvas {
+      background-color: #fafafa;
+      border-bottom: 2px solid #000;
+    }
+
+    /* Mobile On-Screen D-Pad */
+    #dpad {
+      width: 100%;
+      flex-grow: 1;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 5px;
+      padding: 10px;
+      background-color: #eee;
+    }
+    .dbtn {
+      background-color: #333;
+      color: #fff;
+      font-size: 20px;
+      border: none;
+      border-radius: 6px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      user-select: none;
+    }
+    .dbtn:active {
+      background-color: #555;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  
+  <!-- MENU SCREEN -->
+  <div id="menu-screen" class="screen">
+    <h1 id="main-title">SNAKE</h1>
+    <p id="sub-title">BY ADEX GAMES</p>
+    <button class="btn" onclick="startGame()">START</button>
+    <button class="btn" onclick="showAbout()">ABOUT US</button>
+  </div>
+
+  <!-- ABOUT US SCREEN -->
+  <div id="about-screen" class="screen hidden">
+    <p>Hi, I am Amar and I have made this game for fun and play and rate us.</p>
+    <button class="btn" onclick="showMenu()">BACK</button>
+  </div>
+
+  <!-- GAMEPLAY SCREEN -->
+  <div id="game-screen" class="screen hidden">
+    <div id="hud">
+      <span>Score: <span id="score">0</span></span>
+      <span id="special-timer"></span>
+    </div>
+    <canvas id="gameCanvas" width="360" height="360"></canvas>
+    
+    <!-- On-screen Gamepad -->
+    <div id="dpad">
+      <div></div>
+      <button class="dbtn" onclick="setDirection('UP')">▲</button>
+      <div></div>
+      <button class="dbtn" onclick="setDirection('LEFT')">◄</button>
+      <div></div>
+      <button class="dbtn" onclick="setDirection('RIGHT')">►</button>
+      <div></div>
+      <button class="dbtn" onclick="setDirection('DOWN')">▼</button>
+      <div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  const gridSize = 18;
+  const tileCount = canvas.width / gridSize;
+
+  let snake = [];
+  let dx = gridSize;
+  let dy = 0;
+  let score = 0;
+  let regularEatenCount = 0;
+
+  let food = { x: 0, y: 0 };
+  let specialFood = null;
+  let specialTimer = 0;
+  let specialInterval = null;
+  let gameLoop = null;
+
+  // Screen Switching
+  function showMenu() {
+    document.getElementById("menu-screen").classList.remove("hidden");
+    document.getElementById("about-screen").classList.add("hidden");
+    document.getElementById("game-screen").classList.add("hidden");
+    clearInterval(gameLoop);
+    clearInterval(specialInterval);
+  }
+
+  function showAbout() {
+    document.getElementById("menu-screen").classList.add("hidden");
+    document.getElementById("about-screen").classList.remove("hidden");
+  }
+
+  function startGame() {
+    document.getElementById("menu-screen").classList.add("hidden");
+    document.getElementById("game-screen").classList.remove("hidden");
+
+    snake = [
+      { x: 5 * gridSize, y: 10 * gridSize },
+      { x: 4 * gridSize, y: 10 * gridSize },
+      { x: 3 * gridSize, y: 10 * gridSize }
+    ];
+    dx = gridSize;
+    dy = 0;
+    score = 0;
+    regularEatenCount = 0;
+    specialFood = null;
+    document.getElementById("score").innerText = score;
+    document.getElementById("special-timer").innerText = "";
+
+    spawnFood();
+    if (gameLoop) clearInterval(gameLoop);
+    gameLoop = setInterval(update, 120);
+  }
+
+  // Keyboard Controls
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp" || e.key === "w") setDirection("UP");
+    if (e.key === "ArrowDown" || e.key === "s") setDirection("DOWN");
+    if (e.key === "ArrowLeft" || e.key === "a") setDirection("LEFT");
+    if (e.key === "ArrowRight" || e.key === "d") setDirection("RIGHT");
+  });
+
+  function setDirection(dir) {
+    if (dir === "UP" && dy === 0) { dx = 0; dy = -gridSize; }
+    if (dir === "DOWN" && dy === 0) { dx = 0; dy = gridSize; }
+    if (dir === "LEFT" && dx === 0) { dx = -gridSize; dy = 0; }
+    if (dir === "RIGHT" && dx === 0) { dx = gridSize; dy = 0; }
+  }
+
+  function spawnFood() {
+    food = {
+      x: Math.floor(Math.random() * tileCount) * gridSize,
+      y: Math.floor(Math.random() * tileCount) * gridSize
+    };
+  }
+
+  function spawnSpecialFood() {
+    specialFood = {
+      x: Math.floor(Math.random() * tileCount) * gridSize,
+      y: Math.floor(Math.random() * tileCount) * gridSize
+    };
+    specialTimer = 5;
+    document.getElementById("special-timer").innerText = `Bonus: ${specialTimer}s`;
+
+    if (specialInterval) clearInterval(specialInterval);
+    specialInterval = setInterval(() => {
+      specialTimer--;
+      if (specialTimer > 0) {
+        document.getElementById("special-timer").innerText = `Bonus: ${specialTimer}s`;
+      } else {
+        clearInterval(specialInterval);
+        specialFood = null;
+        document.getElementById("special-timer").innerText = "";
+      }
+    }, 1000);
+  }
+
+  function update() {
+    // Move Head
+    const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+    // Wall Collision
+    if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
+      alert(`Game Over! Final Score: ${score}`);
+      showMenu();
+      return;
+    }
+
+    // Body Collision
+    for (let segment of snake) {
+      if (head.x === segment.x && head.y === segment.y) {
+        alert(`Game Over! Final Score: ${score}`);
+        showMenu();
+        return;
+      }
+    }
+
+    snake.unshift(head);
+
+    // Eat Normal Food (+1 Score)
+    if (head.x === food.x && head.y === food.y) {
+      score += 1;
+      regularEatenCount += 1;
+      document.getElementById("score").innerText = score;
+      spawnFood();
+
+      // Trigger Special Bonus Fruit every 6 regular scores
+      if (regularEatenCount % 6 === 0) {
+        spawnSpecialFood();
+      }
+    } 
+    // Eat Special Food (+50 Boost)
+    else if (specialFood && head.x === specialFood.x && head.y === specialFood.y) {
+      score += 50;
+      document.getElementById("score").innerText = score;
+      specialFood = null;
+      clearInterval(specialInterval);
+      document.getElementById("special-timer").innerText = "";
+    } else {
+      snake.pop();
+    }
+
+    draw();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Snake
+    snake.forEach((part, index) => {
+      ctx.fillStyle = index === 0 ? "#2e7d32" : "#4caf50";
+      ctx.fillRect(part.x, part.y, gridSize - 1, gridSize - 1);
+    });
+
+    // Draw Normal Food (Red Square)
+    ctx.fillStyle = "#d32f2f";
+    ctx.fillRect(food.x, food.y, gridSize - 1, gridSize - 1);
+
+    // Draw Special Food (Orange Gold Square)
+    if (specialFood) {
+      ctx.fillStyle = "#ff9800";
+      ctx.fillRect(specialFood.x, specialFood.y, gridSize - 1, gridSize - 1);
+    }
+  }
+</script>
+</body>
+</html>
